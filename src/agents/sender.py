@@ -1,5 +1,5 @@
 import numpy as np
-from util import RaiseWarning, transform, stimgen
+from ..util import RaiseWarning, transform, stimgen
 import pdb
 
 

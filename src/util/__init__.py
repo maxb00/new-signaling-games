@@ -54,3 +54,33 @@ def stimgen(n: int) -> float:
       float: the coefficient of the contiguous reward
     """
     return 1 / 2**(n**2)
+
+
+def linear_reward_fn(param: tuple[float, float], null_signal=False):
+    def get_reward(state, action):
+        if null_signal and action == -1:
+            return 0
+        return param[0] - param[1] * abs(state - action)
+
+    return get_reward
+
+
+def generalized_stimgen(arr: np.ndarray, y: int, x: int, reward: float):
+    # Mutates arr in place with a generalized stimgen for some reward in row y.
+    # Two pointers ;)
+    left_pointer = right_pointer = x
+    x_lim = arr.shape[1]
+
+    for i in range(1, 4):  # arbitrary range. stimgen(0) = 1
+        # calculate this step's reduced reward with the stimgen function
+        reduced_reward = stimgen(i) * reward
+
+        right_pointer += 1
+        if right_pointer < x_lim:
+            # give reduced reward to ith right neighbor if in game bounds
+            arr[y, right_pointer] += reduced_reward
+
+        left_pointer -= 1
+        if left_pointer >= 0:
+            # give reduced reward to the ith left neighbor if in game bounds
+            arr[y, left_pointer] += reduced_reward

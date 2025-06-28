@@ -1,3 +1,5 @@
+import csv
+import os
 from .util import linear_reward_fn, normal_state_priors, display
 from .agents import sender, receiver
 import numpy as np
@@ -85,7 +87,7 @@ class SignalingGame:
                 for action in range(self.num_actions):
                     state_signal_expected_payoff += step_action_probs[signal, action] * self.evaluate(
                         world_state, action)
-
+                # TODO: Consider returning an array of state payoff for the CSV - requires display helper edit
                 state_expected_payoff += step_signal_probs[signal,
                                                            world_state] * state_signal_expected_payoff
             expected_payoff += state_expected_payoff
@@ -155,7 +157,7 @@ class SignalingGame:
                 (1 - n_remainder_states / self.num_signals) * \
                 np.log(expected_bucket_size)
 
-    def __call__(self, num_iters: int, record_interval: int, repeat_num: int, make_gif: bool) -> None:
+    def __call__(self, num_iters: int, record_interval: int, repeat_num: int, image_option: str) -> None:
         # Run the simulation
 
         # Main loop
@@ -197,11 +199,33 @@ class SignalingGame:
                 "reward": reward
             })
 
+        ### record run info
+
+        # strucutres to get+store data
+        final_signal_probs = self.sender.history[-1]
+        final_action_probs = self.receiver.history[-1]
+        # TODO: Consider array for payoff-by-state array for final values
+        final_payoff = self.expected_payoff(final_signal_probs, final_action_probs)
+
+        null_usage_by_state = np.zeros(self.num_states, dtype=int)
+        state_counts = np.zeros(self.num_states, dtype=int)
+
+        # count null states if any
+        if self.null_signal:
+            for h in self.history:
+                s = h["state"]
+                sig = h["signal"]
+                state_counts[s] += 1
+                if sig == -1:
+                    null_usage_by_state[s] += 1
+
         # generate visuals from game history
-        filename = f"./simulations/{self.num_states}_{self.num_signals}_{self.num_actions}/{self.reward_parameter}{'_null' if self.null_signal else ''}_{num_iters}"
+        output_dir = f"./simulations/{self.num_states}_{self.num_signals}_{self.num_actions}/"
+        os.makedirs(output_dir, exist_ok=True)
+        filename = f"{self.reward_parameter}{'_null' if self.null_signal else ''}_{num_iters}"
         if repeat_num is not None:
             filename += f"_{repeat_num}"
-        if record_interval != -1 and make_gif:
+        if record_interval != -1 and image_option == "gif":
             display.gen_gif(
                 self.sender.history,
                 self.receiver.history,
@@ -212,9 +236,9 @@ class SignalingGame:
                 num_iters,
                 record_interval,
                 duration=100,
-                output_file=filename + ".gif"
+                output_file=output_dir + filename + ".gif"
             )
-        elif record_interval != -1:
+        elif record_interval != -1 and image_option == "image":
             display.gen_single_heatmap(
                 self.sender.history,
                 self.receiver.history,
@@ -225,5 +249,23 @@ class SignalingGame:
                 num_iters,
                 record_interval,
                 duration=100,
-                output_file=filename + ".jpg"
+                output_file=output_dir + filename + ".jpg"
             )
+
+        # print to csv
+        csv_filename = "results_" + filename
+        with open(output_dir + csv_filename + ".csv", "w", newline="") as f:
+            writer = csv.writer(f)
+            writer.writerow(["state", "null_count", "total_count", "null_fraction","sn_sg_0","sn_sg_1","sn_sg_null","rc_sg_0", "rc_sg_1","payoff"])
+            for s in range(self.num_states):
+                if state_counts[s] > 0:
+                    frac = null_usage_by_state[s] / state_counts[s]
+                else:
+                    frac = 0
+                sg_prb = final_signal_probs[:, s]
+                ac_prb = final_action_probs[:, s]
+                if len(sg_prb) > 2:
+                    writer.writerow([s, null_usage_by_state[s], state_counts[s], frac, sg_prb[0], sg_prb[1], sg_prb[2], ac_prb[0], ac_prb[1], final_payoff])
+                else:
+                    writer.writerow([s, null_usage_by_state[s], state_counts[s], frac, sg_prb[0], sg_prb[1], 0, ac_prb[0], ac_prb[1], final_payoff])
+

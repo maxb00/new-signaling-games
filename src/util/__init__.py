@@ -1,5 +1,8 @@
+import os
+import csv
 import numpy as np
 from warnings import catch_warnings
+from builtins import open
 
 
 def normpdf(index: int, mean: float, standard_deviation: float) -> float:
@@ -84,3 +87,41 @@ def generalized_stimgen(arr: np.ndarray, y: int, x: int, reward: float):
         if left_pointer >= 0:
             # give reduced reward to the ith left neighbor if in game bounds
             arr[y, left_pointer] += reduced_reward
+
+def load_weights(filename: str):
+    sg_wts = []
+    rc_wts = []
+    payoff = 0
+    with open(filename, newline='') as csvfile:
+        reader = csv.reader(csvfile)
+        flag = True
+        for row in reader:
+            if flag:
+                flag = False
+            else:
+                sg_wts.append([float(x) for x in row[4:7]])
+                rc_wts.append([float(x) for x in row[7:9]])
+                if len(row) == 10:
+                    payoff = float(row[9])
+    return sg_wts, rc_wts, payoff
+
+
+def get_stats_by_folder(folder_name: str, success_threshold: float) -> dict:
+    files = os.listdir(folder_name)
+    files = [x for x in files if x[-3:] == "csv"]
+    
+    payoff_average = 0
+    success_count = 0
+    for fi in files:
+        _, _, payoff = load_weights(folder_name + fi)
+        payoff_average += payoff
+
+        if payoff >= success_threshold:
+            success_count += 1
+
+    stats = {
+        "success_count": success_count,
+        "payoff_average": payoff_average,
+    }
+
+    return stats

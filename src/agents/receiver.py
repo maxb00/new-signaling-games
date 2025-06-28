@@ -20,6 +20,7 @@ class Receiver:
             (self.num_signals, self.num_actions))
         self.state_action_weights = np.ones(
             (self.num_states, self.num_actions))
+        # TODO: Consider "meta-urn" scoring urn reliability
 
         # list of final signal_action_probs gen-by-gen
         self.history = []
@@ -31,6 +32,7 @@ class Receiver:
     @RaiseWarning  # throws an error when underflow warnings encountered
     def generate_action(self, signal: int, world_state: int, make_record: bool) -> int:
         # transform weights
+        # TODO: Combine urns for observed state before calculating weights
         try:
             # first, transform the slice of signal-to-action weights
             transformation_vector = np.vectorize(transform, otypes=[float])

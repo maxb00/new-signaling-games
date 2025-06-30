@@ -1,3 +1,4 @@
+from collections.abc import Callable
 import csv
 import os
 from .util import linear_reward_fn, normal_state_priors, display
@@ -8,7 +9,8 @@ import numpy as np
 class SignalingGame:
     def __init__(self, n_states: int, n_signals: int, n_actions: int,
                  sn_stimgem: bool, rc_stimgen: bool, state_prior_dist: str,
-                 peek_chance: float, reward_param: tuple[float, float]) -> None:
+                 observation_chance: float, reward_param: tuple[float, float],
+                 reward_function: Callable) -> None:
         # Basic game constants
         self.num_states = n_states
         self.num_signals = n_signals
@@ -24,8 +26,8 @@ class SignalingGame:
         # Variable/stochastic game constants
         self.null_signal = False
         self.rng = np.random.default_rng()
-        self.peek_chance = np.array([1-peek_chance, peek_chance])
-        self.reward_function = linear_reward_fn(
+        self.observation_chance = np.array([1-observation_chance, observation_chance])
+        self.reward_function = reward_function(
             reward_param, self.null_signal)
 
         # Set prior distrobutions
@@ -56,7 +58,7 @@ class SignalingGame:
 
     def roll_peek(self) -> bool:
         # "roll the dice" to choose if we can peek. 0 = no, 1 = yes.
-        roll = self.rng.choice(2, p=self.peek_chance)
+        roll = self.rng.choice(2, p=self.observation_chance)
         return roll == 1
 
     def evaluate(self, state: int, action: int) -> float:
@@ -87,7 +89,6 @@ class SignalingGame:
                 for action in range(self.num_actions):
                     state_signal_expected_payoff += step_action_probs[signal, action] * self.evaluate(
                         world_state, action)
-                # TODO: Consider returning an array of state payoff for the CSV - requires display helper edit
                 state_expected_payoff += step_signal_probs[signal,
                                                            world_state] * state_signal_expected_payoff
             expected_payoff += state_expected_payoff
@@ -203,9 +204,8 @@ class SignalingGame:
 
         # strucutres to get+store data
         final_signal_probs = self.sender.history[-1]
-        final_action_probs = self.receiver.history[-1]
-        # TODO: Consider array for payoff-by-state array for final values
-        final_payoff = self.expected_payoff(final_signal_probs, final_action_probs)
+        final_signal_action_probs = self.receiver.signal_action_history[-1]
+        final_payoff = self.expected_payoff(final_signal_probs, final_signal_action_probs)
 
         null_usage_by_state = np.zeros(self.num_states, dtype=int)
         state_counts = np.zeros(self.num_states, dtype=int)
@@ -228,7 +228,8 @@ class SignalingGame:
         if record_interval != -1 and image_option == "gif":
             display.gen_gif(
                 self.sender.history,
-                self.receiver.history,
+                self.receiver.signal_action_history,
+                self.receiver.state_action_history,
                 self.expected_payoff,
                 self.optimal_payoff(),
                 self.info_measure_best_sig,
@@ -241,7 +242,8 @@ class SignalingGame:
         elif record_interval != -1 and image_option == "image":
             display.gen_single_heatmap(
                 self.sender.history,
-                self.receiver.history,
+                self.receiver.signal_action_history,
+                self.receiver.state_action_history,
                 self.expected_payoff,
                 self.optimal_payoff(),
                 self.info_measure_best_sig,
@@ -263,7 +265,7 @@ class SignalingGame:
                 else:
                     frac = 0
                 sg_prb = final_signal_probs[:, s]
-                ac_prb = final_action_probs[:, s]
+                ac_prb = final_signal_action_probs[:, s]
                 if len(sg_prb) > 2:
                     writer.writerow([s, null_usage_by_state[s], state_counts[s], frac, sg_prb[0], sg_prb[1], sg_prb[2], ac_prb[0], ac_prb[1], final_payoff])
                 else:

@@ -1,6 +1,7 @@
 import os
 import csv
 import numpy as np
+from math import inf
 from warnings import catch_warnings
 from builtins import open
 
@@ -68,6 +69,14 @@ def linear_reward_fn(param: tuple[float, float], null_signal=False):
     return get_reward
 
 
+def delta_reward_fn(param: tuple[float, float], null_signal=False):
+    def get_reward(state, action):
+        if null_signal and action == -1:
+            return 0
+        return 1 if abs(state - action) == 0 else 0
+    return get_reward
+
+
 def generalized_stimgen(arr: np.ndarray, y: int, x: int, reward: float):
     # Mutates arr in place with a generalized stimgen for some reward in row y.
     # Two pointers ;)
@@ -112,16 +121,26 @@ def get_stats_by_folder(folder_name: str, success_threshold: float) -> dict:
     
     payoff_average = 0
     success_count = 0
+    payoff_range = [inf, -inf]
     for fi in files:
+        # load weights + results
         _, _, payoff = load_weights(folder_name + fi)
+
+        # update payoff total
         payoff_average += payoff
 
+        # update success count
         if payoff >= success_threshold:
             success_count += 1
+
+        # update payoff range
+        payoff_range = min(payoff, payoff_range[0]), max(payoff, payoff_range[1])
+
 
     stats = {
         "success_count": success_count,
         "payoff_average": payoff_average,
+        "payoff_range": payoff_range
     }
 
     return stats

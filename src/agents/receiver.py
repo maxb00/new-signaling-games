@@ -23,7 +23,8 @@ class Receiver:
         # TODO: Consider "meta-urn" scoring urn reliability
 
         # list of final signal_action_probs gen-by-gen
-        self.history = []
+        self.signal_action_history = []
+        self.state_action_history = []
 
         # structures for holding intermediate choices
         self.latest_state_action_choice = -1
@@ -31,39 +32,45 @@ class Receiver:
 
     @RaiseWarning  # throws an error when underflow warnings encountered
     def generate_action(self, signal: int, world_state: int, make_record: bool) -> int:
+        # meaningful defualts for pylance
+        signal_action_probs = np.zeros_like(self.signal_action_weights)
+        state_action_probs = np.zeros_like(self.state_action_weights)
+        action = -1
+
         # transform weights
-        # TODO: Combine urns for observed state before calculating weights
         try:
             # first, transform the slice of signal-to-action weights
             transformation_vector = np.vectorize(transform, otypes=[float])
-            transformed_signal_action_weights = transformation_vector(
+            transformed_signal_action_weights: np.ndarray = transformation_vector(
                 self.signal_action_weights)
             # Each row represents a signal;
             # sum the transformed propensities to convert them into action proabilities given a signal
             row_sums = np.sum(transformed_signal_action_weights, axis=1)
-            signal_action_probs = transformed_signal_action_weights.T / row_sums
+            signal_action_probs: np.ndarray = transformed_signal_action_weights.T / row_sums
+
+            # calculate state-action probs for recording or usage if we are observing the world
+            # transform to workable weight scores
+            transformed_state_action_weights: np.ndarray = transformation_vector(
+                self.state_action_weights)
+            # sum transformed propensities to convert to action probabilities
+            state_action_sum = np.sum(transformed_state_action_weights, axis=1)
+            state_action_probs = transformed_state_action_weights.T / state_action_sum
+
+            # before pooling, pick an action from each "urn" to determine if that "urn" is rewarded
+            self.latest_state_action_choice = self.random.choice(
+                self.num_actions, p=state_action_probs.T[world_state])
+            self.latest_signal_action_choice = self.random.choice(
+                self.num_actions, p=signal_action_probs.T[signal])
 
             if world_state != -1:
-                # we are peeking at the world state, and should consider additonal propensities
-
-                # transform to workable weight scores
-                transformed_state_action_weights = transformation_vector(
-                    self.state_action_weights)
-                # pick out given state
-                given_state_action_weights = transformed_state_action_weights[world_state]
-                # sum transformed propensities to convert to action probabilities
-                state_action_sum = np.sum(given_state_action_weights)
-                given_state_action_probs = given_state_action_weights / state_action_sum
-
-                # before pooling, pick an action from each "urn" to determine if that "urn" is rewarded
-                self.latest_state_action_choice = self.random.choice(
-                    self.num_actions, p=given_state_action_probs)
-                self.latest_signal_action_choice = self.random.choice(
-                    self.num_actions, p=signal_action_probs.T[signal])
-
-                # linear combine signal-to-action probs for given signal with state-to-action probs
-                signal_action_probs[:, signal] += given_state_action_probs
-                signal_action_probs[:, signal] /= 2
+                # we are observing the world state, and should consider additonal propensities
+                # dump the buckets together (add pre-transformation weights) and recalculate true propensities
+                # the score for each state will be added to the buckets for all signals.
+                transformed_signal_action_weights: np.ndarray = transformation_vector(
+                    self.signal_action_weights + self.state_action_weights[world_state])
+                # sum the transformed propensities to convert them into action proabilities given a signal
+                row_sums = np.sum(transformed_signal_action_weights, axis=1)
+                signal_action_probs: np.ndarray = transformed_signal_action_weights.T / row_sums
 
         except RuntimeWarning:
             print("Reciever failed to covert weights")
@@ -82,7 +89,8 @@ class Receiver:
 
         # record if needed
         if make_record:
-            self.history.append(signal_action_probs.T)
+            self.signal_action_history.append(signal_action_probs.T)
+            self.state_action_history.append(state_action_probs.T)
 
         return action
 
@@ -90,7 +98,7 @@ class Receiver:
         # Update the number of "balls in the urn" for a state, signal pair.
         # Generalizes reward to nearby states if stimulus_generalization == true during setup.
 
-        # If we peeked, we're going to refer to our saved latest choices
+        # If we observed the world state, we're going to refer to our saved latest choices
         if world_state != -1:  # we peeked!
             signal_action_gets_reward = self.latest_signal_action_choice != -1 \
                 and self.latest_signal_action_choice == action
@@ -121,7 +129,7 @@ class Receiver:
         # utility function for directly printing the probs from the most recent generate_action()
 
         # get probs from history
-        probs = self.history[-1]
+        probs = self.signal_action_history[-1]
 
         # Build Header  means: message | state
         print('m|a', end=' ')

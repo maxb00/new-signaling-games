@@ -97,34 +97,48 @@ def generalized_stimgen(arr: np.ndarray, y: int, x: int, reward: float):
             # give reduced reward to the ith left neighbor if in game bounds
             arr[y, left_pointer] += reduced_reward
 
-def load_weights(filename: str):
+
+def load_weights(filename: str) -> tuple[np.ndarray, np.ndarray, float]:
     sg_wts = []
     rc_wts = []
     payoff = 0
     with open(filename, newline='') as csvfile:
         reader = csv.reader(csvfile)
         flag = True
+        headers: list[str] = []
         for row in reader:
-            if flag:
+            if flag:  # Skip the header row
+                headers += row
                 flag = False
-            else:
-                sg_wts.append([float(x) for x in row[4:7]])
-                rc_wts.append([float(x) for x in row[7:9]])
-                if len(row) == 10:
-                    payoff = float(row[9])
-    return sg_wts, rc_wts, payoff
+                continue
+
+            state_signal_weights = []
+            signal_action_weights = []
+            for i in range(len(row)):
+                if headers[i].startswith("sn_sg"):
+                    state_signal_weights.append(float(row[i]))
+                elif headers[i].startswith("rc_ac"):
+                    signal_action_weights.append(float(row[i]))
+                elif headers[i] == "payoff":
+                    payoff = float(row[i])
+
+            sg_wts.append(state_signal_weights)
+            rc_wts.append(signal_action_weights)
+
+    return np.array(sg_wts), np.array(rc_wts), payoff
 
 
-def get_stats_by_folder(folder_name: str, success_threshold: float) -> dict:
+def get_stats_by_folder(folder_name: str, success_threshold: float, n_signals: int) -> dict:
     files = os.listdir(folder_name)
     files = [x for x in files if x[-3:] == "csv"]
-    
+
     payoff_average = 0
     success_count = 0
+    pooling_count = 0
     payoff_range = [inf, -inf]
     for fi in files:
         # load weights + results
-        _, _, payoff = load_weights(folder_name + fi)
+        w_sender, w_receiver, payoff = load_weights(folder_name + fi)
 
         # update payoff total
         payoff_average += payoff
@@ -134,13 +148,23 @@ def get_stats_by_folder(folder_name: str, success_threshold: float) -> dict:
             success_count += 1
 
         # update payoff range
-        payoff_range = min(payoff, payoff_range[0]), max(payoff, payoff_range[1])
+        payoff_range = min(payoff, payoff_range[0]), max(
+            payoff, payoff_range[1])
 
+        # did this game include any unused signals?
+        signals_used = set()
+        for i in range(w_sender.shape[0]):
+            state_signal = np.argmax(w_sender[i])
+            signals_used.add(state_signal)
+        if signals_used != set(range(n_signals)):
+            # if there was an unused signal, this game is in a pooling equilibrium
+            pooling_count += 1
 
     stats = {
         "success_count": success_count,
         "payoff_average": payoff_average,
-        "payoff_range": payoff_range
+        "payoff_range": payoff_range,
+        "pooling_count": pooling_count
     }
 
     return stats

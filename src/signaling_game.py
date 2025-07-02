@@ -26,7 +26,8 @@ class SignalingGame:
         # Variable/stochastic game constants
         self.null_signal = False
         self.rng = np.random.default_rng()
-        self.observation_chance = np.array([1-observation_chance, observation_chance])
+        self.observation_chance = np.array(
+            [1-observation_chance, observation_chance])
         self.reward_function = reward_function(
             reward_param, self.null_signal)
 
@@ -200,12 +201,13 @@ class SignalingGame:
                 "reward": reward
             })
 
-        ### record run info
+        # record run info
 
         # strucutres to get+store data
         final_signal_probs = self.sender.history[-1]
         final_signal_action_probs = self.receiver.signal_action_history[-1]
-        final_payoff = self.expected_payoff(final_signal_probs, final_signal_action_probs)
+        final_payoff = self.expected_payoff(
+            final_signal_probs, final_signal_action_probs)
 
         null_usage_by_state = np.zeros(self.num_states, dtype=int)
         state_counts = np.zeros(self.num_states, dtype=int)
@@ -256,9 +258,19 @@ class SignalingGame:
 
         # print to csv
         csv_filename = "results_" + filename
+
+        # assemble header list
+        header_list = ["state", "null_count", "total_count", "null_fraction"]
+        for i in range(self.num_signals-1):
+            header_list.append(f"sn_sg_{i}")
+        header_list.append("sn_sg_null")
+        for i in range(self.num_actions):
+            header_list.append(f"rc_ac_{i}")
+        header_list.append("payoff")
+
         with open(output_dir + csv_filename + ".csv", "w", newline="") as f:
             writer = csv.writer(f)
-            writer.writerow(["state", "null_count", "total_count", "null_fraction","sn_sg_0","sn_sg_1","sn_sg_null","rc_sg_0", "rc_sg_1","payoff"])
+            writer.writerow(header_list)
             for s in range(self.num_states):
                 if state_counts[s] > 0:
                     frac = null_usage_by_state[s] / state_counts[s]
@@ -266,8 +278,13 @@ class SignalingGame:
                     frac = 0
                 sg_prb = final_signal_probs[:, s]
                 ac_prb = final_signal_action_probs[:, s]
-                if len(sg_prb) > 2:
-                    writer.writerow([s, null_usage_by_state[s], state_counts[s], frac, sg_prb[0], sg_prb[1], sg_prb[2], ac_prb[0], ac_prb[1], final_payoff])
-                else:
-                    writer.writerow([s, null_usage_by_state[s], state_counts[s], frac, sg_prb[0], sg_prb[1], 0, ac_prb[0], ac_prb[1], final_payoff])
 
+                # assemble row
+                row = [s, null_usage_by_state[s], state_counts[s], frac]
+                for i in range(self.num_signals):
+                    row.append(sg_prb[i])
+                for i in range(self.num_actions):
+                    row.append(ac_prb[i])
+                row.append(final_payoff)
+
+                writer.writerow(row)

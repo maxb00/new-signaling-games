@@ -1,17 +1,20 @@
+from collections.abc import Callable
 import numpy as np
-from ..util import RaiseWarning, transform, stimgen
+from ..util import RaiseWarning, stimgen
 import pdb
 
 
 class Sender:
     def __init__(self, n_state: int, n_signals: int, rng: np.random.Generator,
-                 null_signal: bool, stimulus_generalization: bool) -> None:
+                 null_signal: bool, stimulus_generalization: bool,
+                 transform_func: Callable | None) -> None:
         # constants
         self.num_states = n_state  # during signal choice, null will be n.
         self.num_signals = n_signals + (1 if null_signal else 0)
         self.null_used = null_signal
         self.stimgen = stimulus_generalization
         self.random = rng
+        self.transform_func = transform_func
 
         # the up-to-date weights
         self.signal_weights = np.ones((self.num_signals, self.num_states))
@@ -24,14 +27,24 @@ class Sender:
     def generate_signal(self, state: int, record=False) -> int:
         # Convert weights to probabilities
         try:
-            # converts my piecewise transformation into a vector I use for ops
-            transformation_vector = np.vectorize(transform, otypes=[float])
-            # transform signal weights using piecewise. projects weights for sustainable growth
-            transformed_weights = transformation_vector(self.signal_weights)
-            # sum the weight of all signals for each state
-            col_sums = np.sum(transformed_weights, axis=0)
-            # convert the transformed weights to probabilities of signal given state
-            prob = transformed_weights / col_sums
+            # transform weights
+            # nota bene: we often use some kind of reciprocal function/quadratic to smooth negative rewards
+            if self.transform_func is not None:
+                # converts my piecewise transformation into a vector I use for ops
+                transformation_vector = np.vectorize(
+                    self.transform_func, otypes=[float])
+                # transform signal weights using piecewise. projects weights for sustainable growth
+                transformed_weights = transformation_vector(
+                    self.signal_weights)
+                # sum the weight of all signals for each state
+                col_sums = np.sum(transformed_weights, axis=0)
+                # convert the transformed weights to probabilities of signal given state
+                prob = transformed_weights / col_sums
+            else:
+                # sum the weight of all signals for each state
+                col_sums = np.sum(self.signal_weights, axis=0)
+                # convert the transformed weights to probabilities of signal given state
+                prob = self.signal_weights / col_sums
         except RuntimeWarning:
             print("Sender failed to convert weights")
             pdb.set_trace()

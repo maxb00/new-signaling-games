@@ -3,10 +3,11 @@ import imageio.v2 as imageio
 import seaborn as sns
 import os
 import matplotlib
+import gc
 matplotlib.use("TKAgg")
 
 
-def gen_gif(signal_history: list, action_history: list, state_action_history: list, ep_fn, opt_payoff: float, 
+def gen_gif(signal_history: list, action_history: list, state_action_history: list, ep_fn, opt_payoff: float,
             info_measure, opt_info: float, num_iter: int, record_interval: int, duration: int, output_file: str):
     """Generates a heatmap gif of the whole simulation and saves it into 
     test.gif
@@ -56,7 +57,8 @@ def gen_gif(signal_history: list, action_history: list, state_action_history: li
         axs[1].set_ylabel("messages")
         axs[1].set_title("Receiver\'s Signal-Action weights")
 
-        sns.heatmap(state_action_history[i], linewidths=0.5, linecolor="white", square=True, cbar=False, annot=True,fmt=".1f", ax=axs[2])
+        sns.heatmap(state_action_history[i], linewidths=0.5, linecolor="white",
+                    square=True, cbar=False, annot=True, fmt=".1f", ax=axs[2])
         axs[2].set_xlabel("actions")
         axs[2].set_ylabel("states")
         axs[2].set_title("Receiver\'s State-Action weights")
@@ -87,7 +89,9 @@ def gen_gif(signal_history: list, action_history: list, state_action_history: li
 
         fig.suptitle(f"Rollout {(i+1)*record_interval}")
         plt.savefig(f"./images/game_{(i+1)*record_interval}.png")
+        plt.clf()
         plt.close(fig)
+        gc.collect()
 
     images = []
     for filename in [f"./images/game_{(j+1)*record_interval}.png" for j in range(num_images)]:
@@ -105,7 +109,7 @@ def gen_gif(signal_history: list, action_history: list, state_action_history: li
 # f"./simulations/{self.num_states}_{self.num_signals}_{self.num_actions}/{self.reward_param}{'_null' if self.null_signal else ''}_{num_iter}.gif"
 
 
-def gen_single_heatmap(signal_history: list, action_history: list, state_action_history: list, ep_fn, opt_payoff: float, 
+def gen_single_heatmap(signal_history: list, action_history: list, state_action_history: list, ep_fn, opt_payoff: float,
                        info_measure, opt_info: float, num_iter: int, record_interval: int, duration: int, output_file: str):
     if not os.path.exists("./images"):
         os.mkdir("images")
@@ -146,7 +150,8 @@ def gen_single_heatmap(signal_history: list, action_history: list, state_action_
     axs[1].set_ylabel("messages")
     axs[1].set_title("Receiver\'s Signal-Action weights")
 
-    sns.heatmap(state_action_history[-1], linewidths=0.5, linecolor="white", square=True, cbar=False, annot=True, fmt=".1f", ax=axs[2])
+    sns.heatmap(state_action_history[-1], linewidths=0.5, linecolor="white",
+                square=True, cbar=False, annot=True, fmt=".1f", ax=axs[2])
     axs[2].set_xlabel("actions")
     axs[2].set_ylabel("states")
     axs[2].set_title("Receiver\'s State-Action weights")
@@ -177,6 +182,8 @@ def gen_single_heatmap(signal_history: list, action_history: list, state_action_
 
     # fig.suptitle(f"Final Strategy")
     plt.savefig(output_file)
+    plt.clf()
     plt.close(fig)
+    gc.collect()
 
     return

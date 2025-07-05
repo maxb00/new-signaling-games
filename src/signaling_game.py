@@ -1,7 +1,7 @@
 from collections.abc import Callable
 import csv
 import os
-from .util import linear_reward_fn, normal_state_priors, display
+from .util import normal_state_priors, display
 from .agents import sender, receiver
 import numpy as np
 
@@ -10,7 +10,7 @@ class SignalingGame:
     def __init__(self, n_states: int, n_signals: int, n_actions: int,
                  sn_stimgem: bool, rc_stimgen: bool, state_prior_dist: str,
                  observation_chance: float, reward_param: tuple[float, float],
-                 reward_function: Callable) -> None:
+                 reward_function: Callable, weight_transform_func: Callable | None) -> None:
         # Basic game constants
         self.num_states = n_states
         self.num_signals = n_signals
@@ -30,6 +30,7 @@ class SignalingGame:
             [1-observation_chance, observation_chance])
         self.reward_function = reward_function(
             reward_param, self.null_signal)
+        self.transformation = weight_transform_func
 
         # Set prior distrobutions
         if state_prior_dist == "uniform":
@@ -42,10 +43,10 @@ class SignalingGame:
 
         # Initialize agents
         self.sender = sender.Sender(
-            self.num_states, self.num_signals, self.rng, self.null_signal, sn_stimgem)
+            self.num_states, self.num_signals, self.rng, self.null_signal, sn_stimgem, self.transformation)
 
         self.receiver = receiver.Receiver(
-            self.num_actions, self.num_signals, self.num_states, self.rng, rc_stimgen)
+            self.num_actions, self.num_signals, self.num_states, self.rng, rc_stimgen, self.transformation)
 
     def set_random_seed(self, seed: int):
         # for reproducability - not used during normal runs.
@@ -161,7 +162,7 @@ class SignalingGame:
 
     def __call__(self, num_iters: int, record_interval: int, repeat_num: int, image_option: str) -> None:
         # Run the simulation
-
+        self.history = []  # reset our history object - only store current game
         # Main loop
         for step in range(num_iters):
             step_state = self.choose_state()
@@ -177,12 +178,13 @@ class SignalingGame:
             self.current_signal = step_signal
 
             # Receiver observe signal and chooses and action.
-            peek_state = -1
-            if self.roll_peek():
+            observed_state = -1
+            observation_choice = self.roll_peek()
+            if observation_choice:
                 # if we can peek, send the world state. else, send -1
-                peek_state = step_state
+                observed_state = step_state
             step_action = self.receiver.generate_action(
-                step_signal, peek_state, should_record_step)
+                step_signal, observed_state, should_record_step)
             self.current_action = step_action
 
             # evaluate reward
@@ -191,13 +193,14 @@ class SignalingGame:
             # send reward to sender and receiver
             self.sender.update_signal_weights(step_state, step_signal, reward)
             self.receiver.update_action_weights(
-                step_signal, step_action, reward, peek_state)
+                step_signal, step_action, reward, observed_state)
 
             # save game state to history
             self.history.append({
                 "state": step_state,
                 "signal": step_signal,
                 "step_action": step_action,
+                "observed": observation_choice,
                 "reward": reward
             })
 
@@ -208,6 +211,7 @@ class SignalingGame:
         final_signal_action_probs = self.receiver.signal_action_history[-1]
         final_payoff = self.expected_payoff(
             final_signal_probs, final_signal_action_probs)
+        payoff_history_list = [x["reward"] for x in self.history]
 
         null_usage_by_state = np.zeros(self.num_states, dtype=int)
         state_counts = np.zeros(self.num_states, dtype=int)
@@ -267,6 +271,7 @@ class SignalingGame:
         for i in range(self.num_actions):
             header_list.append(f"rc_ac_{i}")
         header_list.append("payoff")
+        header_list.append("average_payoff")
 
         with open(output_dir + csv_filename + ".csv", "w", newline="") as f:
             writer = csv.writer(f)
@@ -286,5 +291,6 @@ class SignalingGame:
                 for i in range(self.num_actions):
                     row.append(ac_prb[i])
                 row.append(final_payoff)
+                row.append(np.average(payoff_history_list))
 
                 writer.writerow(row)

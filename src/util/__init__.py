@@ -98,10 +98,11 @@ def generalized_stimgen(arr: np.ndarray, y: int, x: int, reward: float):
             arr[y, left_pointer] += reduced_reward
 
 
-def load_weights(filename: str) -> tuple[np.ndarray, np.ndarray, float]:
+def load_weights(filename: str) -> tuple[np.ndarray, np.ndarray, tuple[float, float]]:
     sg_wts = []
     rc_wts = []
-    payoff = 0
+    final_payoff = 0
+    rolling_payoff_average = 0
     with open(filename, newline='') as csvfile:
         reader = csv.reader(csvfile)
         flag = True
@@ -120,19 +121,22 @@ def load_weights(filename: str) -> tuple[np.ndarray, np.ndarray, float]:
                 elif headers[i].startswith("rc_ac"):
                     signal_action_weights.append(float(row[i]))
                 elif headers[i] == "payoff":
-                    payoff = float(row[i])
+                    final_payoff = float(row[i])
+                elif headers[i] == "average_payoff":
+                    rolling_payoff_average = float(row[i])
 
             sg_wts.append(state_signal_weights)
             rc_wts.append(signal_action_weights)
 
-    return np.array(sg_wts), np.array(rc_wts), payoff
+    return np.array(sg_wts), np.array(rc_wts), (final_payoff, rolling_payoff_average)
 
 
 def get_stats_by_folder(folder_name: str, success_threshold: float, n_signals: int) -> dict:
     files = os.listdir(folder_name)
     files = [x for x in files if x[-3:] == "csv"]
 
-    payoff_average = 0
+    final_payoff_average = 0
+    rolling_payoff_average = 0
     success_count = 0
     pooling_count = 0
     payoff_range = [inf, -inf]
@@ -141,10 +145,11 @@ def get_stats_by_folder(folder_name: str, success_threshold: float, n_signals: i
         w_sender, w_receiver, payoff = load_weights(folder_name + fi)
 
         # update payoff total
-        payoff_average += payoff
+        final_payoff_average += payoff[0]
+        rolling_payoff_average += payoff[1]
 
         # update success count
-        if payoff >= success_threshold:
+        if rolling_payoff_average >= success_threshold:
             success_count += 1
 
         # update payoff range
@@ -160,10 +165,14 @@ def get_stats_by_folder(folder_name: str, success_threshold: float, n_signals: i
             # if there was an unused signal, this game is in a pooling equilibrium
             pooling_count += 1
 
+    final_payoff_average /= len(files)
+    rolling_payoff_average /= len(files)
+
     stats = {
         "success_count": success_count,
-        "payoff_average": payoff_average,
-        "payoff_range": payoff_range,
+        "final_payoff_average": final_payoff_average,
+        "rolling_payoff_average": rolling_payoff_average,
+        "final_payoff_range": payoff_range,
         "pooling_count": pooling_count
     }
 

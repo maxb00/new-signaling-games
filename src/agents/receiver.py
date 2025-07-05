@@ -1,16 +1,18 @@
+from collections.abc import Callable
 import numpy as np
-from ..util import RaiseWarning, transform, generalized_stimgen
+from ..util import RaiseWarning, generalized_stimgen
 import pdb
 
 
 class Receiver:
     # The reciever that peeks!
-    def __init__(self, n_actions: int, n_signals: int, n_states: int, rng: np.random.Generator, stimulus_generalization: bool) -> None:
+    def __init__(self, n_actions: int, n_signals: int, n_states: int, rng: np.random.Generator, stimulus_generalization: bool, transform_func: Callable | None) -> None:
         # basic constants
         self.num_actions = n_actions
         self.num_signals = n_signals
         self.num_states = n_states
         self.stimgen = stimulus_generalization
+        self.transform_func = transform_func
 
         # inherit game rng for reproducability
         self.random = rng
@@ -37,24 +39,35 @@ class Receiver:
         state_action_probs = np.zeros_like(self.state_action_weights)
         action = -1
 
-        # transform weights
         try:
-            # first, transform the slice of signal-to-action weights
-            transformation_vector = np.vectorize(transform, otypes=[float])
-            transformed_signal_action_weights: np.ndarray = transformation_vector(
-                self.signal_action_weights)
-            # Each row represents a signal;
-            # sum the transformed propensities to convert them into action proabilities given a signal
-            row_sums = np.sum(transformed_signal_action_weights, axis=1)
-            signal_action_probs: np.ndarray = transformed_signal_action_weights.T / row_sums
+            # transform weights
+            # nota bene: we often use some kind of reciprocal function/quadratic to smooth negative rewards
+            if self.transform_func is not None:
+                # first, transform the slice of signal-to-action weights
+                transformation_vector = np.vectorize(
+                    self.transform_func, otypes=[float])
+                transformed_signal_action_weights: np.ndarray = transformation_vector(
+                    self.signal_action_weights)
+                # Each row represents a signal;
+                # sum the transformed propensities to convert them into action proabilities given a signal
+                row_sums = np.sum(transformed_signal_action_weights, axis=1)
+                signal_action_probs: np.ndarray = transformed_signal_action_weights.T / row_sums
 
-            # calculate state-action probs for recording or usage if we are observing the world
-            # transform to workable weight scores
-            transformed_state_action_weights: np.ndarray = transformation_vector(
-                self.state_action_weights)
-            # sum transformed propensities to convert to action probabilities
-            state_action_sum = np.sum(transformed_state_action_weights, axis=1)
-            state_action_probs = transformed_state_action_weights.T / state_action_sum
+                # calculate state-action probs for recording or usage if we are observing the world
+                # transform to workable weight scores
+                transformed_state_action_weights: np.ndarray = transformation_vector(
+                    self.state_action_weights)
+                # sum transformed propensities to convert to action probabilities
+                state_action_sum = np.sum(
+                    transformed_state_action_weights, axis=1)
+                state_action_probs = transformed_state_action_weights.T / state_action_sum
+
+            else:
+                row_sums = np.sum(self.signal_action_weights, axis=1)
+                signal_action_probs: np.ndarray = self.signal_action_weights.T / row_sums
+
+                state_action_sum = np.sum(self.state_action_weights, axis=1)
+                state_action_probs = self.state_action_weights.T / state_action_sum
 
             # before pooling, pick an action from each "urn" to determine if that "urn" is rewarded
             self.latest_state_action_choice = self.random.choice(

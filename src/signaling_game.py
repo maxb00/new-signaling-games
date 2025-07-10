@@ -43,22 +43,23 @@ class SignalingGame:
 
         # Initialize agents
         self.sender = sender.Sender(
-            self.num_states, self.num_signals, self.rng, self.null_signal, sn_stimgem, self.transformation)
+            self.num_states, self.num_signals, self.null_signal, sn_stimgem, self.transformation)
 
         self.receiver = receiver.Receiver(
-            self.num_actions, self.num_signals, self.num_states, self.rng, rc_stimgen, self.transformation)
+            self.num_actions, self.num_signals, self.num_states, rc_stimgen, self.transformation)
 
-    def set_random_seed(self, seed: int):
+    def set_random_seed(self, seed: int | None):
         # for reproducability - not used during normal runs.
+        # if random seed is None or this method is not called, all three generators will be unique
         self.rng = np.random.default_rng(seed)
-        self.receiver.random = self.rng
-        self.sender.random = self.rng
+        self.receiver.random = np.random.default_rng(seed)
+        self.sender.random = np.random.default_rng(seed)
 
     def choose_state(self) -> int:
         # choose a random state, weighted by the priors.
         return self.rng.choice(self.num_states, p=self.state_priors)
 
-    def roll_peek(self) -> bool:
+    def roll_observation(self) -> bool:
         # "roll the dice" to choose if we can peek. 0 = no, 1 = yes.
         roll = self.rng.choice(2, p=self.observation_chance)
         return roll == 1
@@ -160,7 +161,7 @@ class SignalingGame:
                 (1 - n_remainder_states / self.num_signals) * \
                 np.log(expected_bucket_size)
 
-    def __call__(self, num_iters: int, record_interval: int, repeat_num: int, image_option: str) -> None:
+    def __call__(self, num_iters: int, record_interval: int, repeat_num: int, image_option: str) -> str:
         # Run the simulation
         self.history = []  # reset our history object - only store current game
         # Main loop
@@ -179,7 +180,7 @@ class SignalingGame:
 
             # Receiver observe signal and chooses and action.
             observed_state = -1
-            observation_choice = self.roll_peek()
+            observation_choice = self.roll_observation()
             if observation_choice:
                 # if we can peek, send the world state. else, send -1
                 observed_state = step_state
@@ -231,7 +232,10 @@ class SignalingGame:
         filename = f"{self.reward_parameter}{'_null' if self.null_signal else ''}_{num_iters}"
         if repeat_num is not None:
             filename += f"_{repeat_num}"
+
+        output_file = ""
         if record_interval != -1 and image_option == "gif":
+            output_file = output_dir + filename + ".gif"
             display.gen_gif(
                 self.sender.history,
                 self.receiver.signal_action_history,
@@ -243,9 +247,10 @@ class SignalingGame:
                 num_iters,
                 record_interval,
                 duration=100,
-                output_file=output_dir + filename + ".gif"
+                output_file=output_file
             )
         elif record_interval != -1 and image_option == "image":
+            output_file = output_dir + filename + ".jpg"
             display.gen_single_heatmap(
                 self.sender.history,
                 self.receiver.signal_action_history,
@@ -257,7 +262,7 @@ class SignalingGame:
                 num_iters,
                 record_interval,
                 duration=100,
-                output_file=output_dir + filename + ".jpg"
+                output_file=output_file
             )
 
         # print to csv
@@ -294,3 +299,4 @@ class SignalingGame:
                 row.append(np.average(payoff_history_list))
 
                 writer.writerow(row)
+        return output_file

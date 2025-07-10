@@ -5,15 +5,14 @@ import pdb
 
 
 class Sender:
-    def __init__(self, n_state: int, n_signals: int, rng: np.random.Generator,
-                 null_signal: bool, stimulus_generalization: bool,
-                 transform_func: Callable | None) -> None:
+    def __init__(self, n_state: int, n_signals: int, null_signal: bool,
+                 stimulus_generalization: bool, transform_func: Callable | None) -> None:
         # constants
         self.num_states = n_state  # during signal choice, null will be n.
         self.num_signals = n_signals + (1 if null_signal else 0)
         self.null_used = null_signal
         self.stimgen = stimulus_generalization
-        self.random = rng
+        self.random = np.random.default_rng()
         self.transform_func = transform_func
 
         # the up-to-date weights

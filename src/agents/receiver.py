@@ -6,7 +6,7 @@ import pdb
 
 class Receiver:
     # The reciever that peeks!
-    def __init__(self, n_actions: int, n_signals: int, n_states: int, rng: np.random.Generator, stimulus_generalization: bool, transform_func: Callable | None) -> None:
+    def __init__(self, n_actions: int, n_signals: int, n_states: int, stimulus_generalization: bool, transform_func: Callable | None) -> None:
         # basic constants
         self.num_actions = n_actions
         self.num_signals = n_signals
@@ -14,8 +14,8 @@ class Receiver:
         self.stimgen = stimulus_generalization
         self.transform_func = transform_func
 
-        # inherit game rng for reproducability
-        self.random = rng
+        # random number generator. Override for reproducability.
+        self.random = np.random.default_rng()
 
         # main storage structures for probs
         self.signal_action_weights = np.ones(

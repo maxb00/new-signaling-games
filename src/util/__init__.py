@@ -139,7 +139,8 @@ def get_stats_by_folder(folder_name: str, success_threshold: float, n_signals: i
     rolling_payoff_average = 0
     success_count = 0
     pooling_count = 0
-    payoff_range = [inf, -inf]
+    final_payoff_range = [inf, -inf]
+    rolling_payoff_range = [inf, -inf]
     for fi in files:
         # load weights + results
         w_sender, w_receiver, payoff = load_weights(folder_name + fi)
@@ -153,8 +154,10 @@ def get_stats_by_folder(folder_name: str, success_threshold: float, n_signals: i
             success_count += 1
 
         # update payoff range
-        payoff_range = min(payoff, payoff_range[0]), max(
-            payoff, payoff_range[1])
+        final_payoff_range = min(final_payoff_average, final_payoff_range[0]), max(
+            final_payoff_average, final_payoff_range[1])
+        rolling_payoff_range = min(rolling_payoff_average, rolling_payoff_range[0]), max(
+            rolling_payoff_average, rolling_payoff_range[1])
 
         # did this game include any unused signals?
         signals_used = set()
@@ -172,7 +175,8 @@ def get_stats_by_folder(folder_name: str, success_threshold: float, n_signals: i
         "success_count": success_count,
         "final_payoff_average": final_payoff_average,
         "rolling_payoff_average": rolling_payoff_average,
-        "final_payoff_range": payoff_range,
+        "final_payoff_range": final_payoff_range,
+        "rolling_payoff_range": rolling_payoff_range,
         "pooling_count": pooling_count
     }
 

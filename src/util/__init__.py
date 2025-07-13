@@ -150,14 +150,14 @@ def get_stats_by_folder(folder_name: str, success_threshold: float, n_signals: i
         rolling_payoff_average += payoff[1]
 
         # update success count
-        if rolling_payoff_average >= success_threshold:
+        if payoff[1] >= success_threshold:
             success_count += 1
 
         # update payoff range
-        final_payoff_range = min(final_payoff_average, final_payoff_range[0]), max(
-            final_payoff_average, final_payoff_range[1])
-        rolling_payoff_range = min(rolling_payoff_average, rolling_payoff_range[0]), max(
-            rolling_payoff_average, rolling_payoff_range[1])
+        final_payoff_range = min(payoff[0], final_payoff_range[0]), max(
+            payoff[0], final_payoff_range[1])
+        rolling_payoff_range = min(payoff[1], rolling_payoff_range[0]), max(
+            payoff[1], rolling_payoff_range[1])
 
         # did this game include any unused signals?
         signals_used = set()

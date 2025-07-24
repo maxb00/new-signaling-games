@@ -32,6 +32,10 @@ class SignalingGame:
             reward_param, self.null_signal)
         self.transformation = weight_transform_func
 
+        # if this is an intentionally reproducable run (set seed) we want to flag and remember high level
+        self.has_set_seed = False
+        self.preset_seed = None
+
         # Set prior distrobutions
         if state_prior_dist == "uniform":
             self.state_priors = np.full(
@@ -54,6 +58,10 @@ class SignalingGame:
         self.rng = np.random.default_rng(seed)
         self.receiver.random = np.random.default_rng(seed)
         self.sender.random = np.random.default_rng(seed)
+
+        # flag set seed
+        self.has_set_seed = True
+        self.preset_seed = seed
 
     def choose_state(self) -> int:
         # choose a random state, weighted by the priors.
@@ -229,9 +237,13 @@ class SignalingGame:
         # generate visuals from game history
         output_dir = f"./simulations/{self.num_states}_{self.num_signals}_{self.num_actions}/"
         os.makedirs(output_dir, exist_ok=True)
+
+        # TODO: Update these filenames to reflect variety of options
         filename = f"{self.reward_parameter}{'_null' if self.null_signal else ''}_{num_iters}"
         if repeat_num is not None:
             filename += f"_{repeat_num}"
+        if self.has_set_seed:
+            filename += f"_{self.preset_seed}"
 
         output_file = ""
         if record_interval != -1 and image_option == "gif":
@@ -299,4 +311,10 @@ class SignalingGame:
                 row.append(np.average(payoff_history_list))
 
                 writer.writerow(row)
+
+        # for dirty testing: dump full game history to txt
+        # import json
+        # with open("history.json", mode="w", encoding="utf-8") as f:
+        #     json.dump(self.history, f, ensure_ascii=False, indent=4)
+
         return output_file

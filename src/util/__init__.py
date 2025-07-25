@@ -131,7 +131,7 @@ def load_weights(filename: str) -> tuple[np.ndarray, np.ndarray, tuple[float, fl
     return np.array(sg_wts), np.array(rc_wts), (final_payoff, rolling_payoff_average)
 
 
-def get_stats_by_folder(folder_name: str, success_threshold: float, n_signals: int) -> dict:
+def get_stats_by_folder(folder_name: str, success_threshold: float, n_signals: int, pooling_threshold: float, n_seeds: int) -> dict:
     files = os.listdir(folder_name)
     files = [x for x in files if x[-3:] == "csv"]
 
@@ -141,43 +141,89 @@ def get_stats_by_folder(folder_name: str, success_threshold: float, n_signals: i
     pooling_count = 0
     final_payoff_range = [inf, -inf]
     rolling_payoff_range = [inf, -inf]
+    seeds_with_pooling = []
+    min_payoff_seed = max_payoff_seed = min_rolling_seed = max_rolling_seed = 0
+    #            0 - 0.5 - 0.75 - 0.875 - 1  
+    payoff_range_buckets = [[], [], [], []]
     for fi in files:
         # load weights + results
         w_sender, w_receiver, payoff = load_weights(folder_name + fi)
+        final_payoff, rolling_payoff = payoff
+
+        # determine seed (strip extension and grab last _ section)
+        seed = int(fi[:-4].split('_')[-1])
 
         # update payoff total
-        final_payoff_average += payoff[0]
-        rolling_payoff_average += payoff[1]
+        final_payoff_average += final_payoff
+        rolling_payoff_average += rolling_payoff
 
         # update success count
         if payoff[1] >= success_threshold:
             success_count += 1
 
-        # update payoff range
-        final_payoff_range = min(payoff[0], final_payoff_range[0]), max(
-            payoff[0], final_payoff_range[1])
-        rolling_payoff_range = min(payoff[1], rolling_payoff_range[0]), max(
-            payoff[1], rolling_payoff_range[1])
+        # update payoff range, save seeds
+        if final_payoff < final_payoff_range[0]:
+            final_payoff_range[0] = final_payoff
+            min_payoff_seed = seed
+
+        if final_payoff > final_payoff_range[1]:
+            final_payoff_range[1] = final_payoff
+            max_payoff_seed = seed
+
+        if rolling_payoff < rolling_payoff_range[0]:
+            rolling_payoff_range[0] = rolling_payoff
+            min_rolling_seed = seed
+
+        if rolling_payoff > rolling_payoff_range[1]:
+            rolling_payoff_range[1] = rolling_payoff
+            max_rolling_seed = seed
+
+        # drop seed into payoff bucket
+        if rolling_payoff <= 0.5:
+            payoff_range_buckets[0].append(seed)
+        elif rolling_payoff <= 0.75:
+            payoff_range_buckets[1].append(seed)
+        elif rolling_payoff <= 0.875:
+            payoff_range_buckets[2].append(seed)
+        else:
+            payoff_range_buckets[3].append(seed)
 
         # did this game include any unused signals?
         signals_used = set()
         for i in range(w_sender.shape[0]):
-            state_signal = np.argmax(w_sender[i])
-            signals_used.add(state_signal)
+            try:
+                # choose first signal above pooling_threshold
+                state_signal = np.where(w_sender[i] > pooling_threshold)[0][0]
+                signals_used.add(state_signal)
+            except IndexError:
+                # no signals were above threshold
+                continue
         if signals_used != set(range(n_signals)):
             # if there was an unused signal, this game is in a pooling equilibrium
             pooling_count += 1
+            seeds_with_pooling.append(seed)
 
     final_payoff_average /= len(files)
     rolling_payoff_average /= len(files)
 
     stats = {
         "success_count": success_count,
-        "final_payoff_average": final_payoff_average,
-        "rolling_payoff_average": rolling_payoff_average,
         "final_payoff_range": final_payoff_range,
+        "final_payoff_average": final_payoff_average,
+        "final_payoff_seeds": [min_payoff_seed, max_payoff_seed],
         "rolling_payoff_range": rolling_payoff_range,
-        "pooling_count": pooling_count
+        "rolling_payoff_average": rolling_payoff_average,
+        "rolling_payoff_seeds": [min_rolling_seed, max_rolling_seed],
+        "pooling_count": pooling_count,
+        "pooling_seeds": seeds_with_pooling[:n_seeds],
+        "<=0.5_count": len(payoff_range_buckets[0]),
+        "<=0.5_seeds": payoff_range_buckets[0][:n_seeds],
+        "0.5-0.75_count": len(payoff_range_buckets[1]),
+        "0.5-0.75_seeds": payoff_range_buckets[1][:n_seeds],
+        "0.75-0.875_count": len(payoff_range_buckets[2]),
+        "0.75-0.875_seeds": payoff_range_buckets[2][:n_seeds],
+        "0.875-1_count": len(payoff_range_buckets[3]),
+        "0.875-1_seeds": payoff_range_buckets[3][:n_seeds]
     }
 
     return stats

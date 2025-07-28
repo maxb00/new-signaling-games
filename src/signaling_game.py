@@ -164,10 +164,11 @@ class SignalingGame:
         if self.null_signal and expected_n_null_used > 0:
             return (optimal_bucket_size / self.num_states) * self.num_signals * np.log(self.num_states / optimal_bucket_size)
         else:
-            return np.log(self.num_states) - \
-                (n_remainder_states / self.num_signals) * np.log(expected_bucket_size + 1) - \
-                (1 - n_remainder_states / self.num_signals) * \
-                np.log(expected_bucket_size)
+            # return np.log(self.num_states) - \
+            #     (n_remainder_states / self.num_signals) * np.log(expected_bucket_size + 1) - \
+            #     (1 - n_remainder_states / self.num_signals) * \
+            #     np.log(expected_bucket_size)
+            return self.num_states * np.log(self.num_states)
 
     def __call__(self, num_iters: int, record_interval: int, repeat_num: int, image_option: str) -> str:
         # Run the simulation

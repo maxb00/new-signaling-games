@@ -1,6 +1,7 @@
 import matplotlib.pyplot as plt
 import imageio.v2 as imageio
 import seaborn as sns
+import numpy as np
 import os
 import matplotlib
 import gc
@@ -30,9 +31,21 @@ def gen_gif(signal_history: list, action_history: list, state_action_history: li
     state_info_y = []
     best_signals_by_im = []
 
+     # determine n signals from signal history
+    n_signals = np.array(signal_history).shape[1]
+
+    # define initial height ratio and compute actal height
+    subplot_height_ratios = [2, 2, 2, 1, 1, 2, 2]
+    subplot_heights_in = np.array(subplot_height_ratios)
+    for _ in range(n_signals-2):
+        # add half an inch to the square-shaped subplots
+        subplot_heights_in[:3] += 0.5
+    # total fig height is sum of augmented section heights in inches
+    total_fig_height = sum(subplot_heights_in)
+
     for i in range(num_images):
-        fig, axs = plt.subplots(7, 1, figsize=(10, 12), gridspec_kw={
-                                'height_ratios': [2, 2, 2, 1, 1, 2, 2]})
+        fig, axs = plt.subplots(7, 1, figsize=(10, total_fig_height), gridspec_kw={
+                                'height_ratios': subplot_height_ratios})
         plt.tight_layout(pad=3)
 
         step_info_measure, step_best_signals = info_measure(signal_history[i])
@@ -122,8 +135,20 @@ def gen_single_heatmap(signal_history: list, action_history: list, state_action_
     state_info_y = []
     best_signals_by_im = []
 
-    fig, axs = plt.subplots(7, 1, figsize=(10, 12), gridspec_kw={
-                            'height_ratios': [2, 2, 2, 1, 1, 2, 2]})
+    # determine n signals from signal history
+    n_signals = np.array(signal_history).shape[1]
+
+    # define initial height ratio and compute actal height
+    subplot_height_ratios = [2, 2, 2, 1, 1, 2, 2]
+    subplot_heights_in = np.array(subplot_height_ratios, dtype=np.float64)
+    for _ in range(n_signals-2):
+        # add half an inch to the square-shaped subplots
+        subplot_heights_in[:3] += 0.5
+    # total fig height is sum of augmented section heights in inches
+    total_fig_height = sum(subplot_heights_in)
+
+    fig, axs = plt.subplots(7, 1, figsize=(10, total_fig_height), gridspec_kw={
+                            'height_ratios': subplot_heights_in})
     plt.tight_layout(pad=3)
 
     # get info measure stuff
@@ -167,6 +192,7 @@ def gen_single_heatmap(signal_history: list, action_history: list, state_action_
     axs[4].set_xlabel("States")
 
     axs[5].plot(ix, epy, label="expected")
+    axs[5].annotate(f"Final Payoff: {epy[-1]}", xy=(1, 0), xycoords="axes fraction", horizontalalignment="right")
     axs[5].plot(ix, optp_y, label="optimal")
     axs[5].legend(loc="upper left")
     axs[5].set_xlabel("rollout")
@@ -174,6 +200,7 @@ def gen_single_heatmap(signal_history: list, action_history: list, state_action_
     axs[5].set_title("Expected payoff by rollout")
 
     axs[6].plot(ix, infoy, label="current")
+    axs[6].annotate(f"Final IM: {infoy[-1]}", xy=(1, 0), xycoords="axes fraction", horizontalalignment="right")
     axs[6].plot(ix, opti_y, label="optimal")
     axs[6].legend(loc="upper left")
     axs[6].set_xlabel("rollout")

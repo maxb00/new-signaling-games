@@ -62,28 +62,40 @@ class Receiver:
                     transformed_state_action_weights, axis=1)
                 state_action_probs = transformed_state_action_weights.T / state_action_sum
 
+                # before pooling, pick an action from each "urn" to determine if that "urn" is rewarded
+                self.latest_state_action_choice = self.random.choice(
+                    self.num_actions, p=state_action_probs.T[world_state])
+                self.latest_signal_action_choice = self.random.choice(
+                    self.num_actions, p=signal_action_probs.T[signal])
+
+                if world_state != -1:
+                    # we are observing the world state, and should consider additonal propensities
+                    # dump the buckets together (add pre-transformation weights) and recalculate true propensities
+                    # the score for each state will be added to the buckets for all signals.
+                    transformed_signal_action_weights: np.ndarray = transformation_vector(
+                        self.signal_action_weights + self.state_action_weights[world_state])
+                    # sum the transformed propensities to convert them into action proabilities given a signal
+                    row_sums = np.sum(transformed_signal_action_weights, axis=1)
+                    signal_action_probs: np.ndarray = transformed_signal_action_weights.T / row_sums
+
             else:
+                # Same as above with no transformation function applied
                 row_sums = np.sum(self.signal_action_weights, axis=1)
                 signal_action_probs: np.ndarray = self.signal_action_weights.T / row_sums
 
                 state_action_sum = np.sum(self.state_action_weights, axis=1)
                 state_action_probs = self.state_action_weights.T / state_action_sum
 
-            # before pooling, pick an action from each "urn" to determine if that "urn" is rewarded
-            self.latest_state_action_choice = self.random.choice(
-                self.num_actions, p=state_action_probs.T[world_state])
-            self.latest_signal_action_choice = self.random.choice(
-                self.num_actions, p=signal_action_probs.T[signal])
+                self.latest_state_action_choice = self.random.choice(
+                    self.num_actions, p=state_action_probs.T[world_state])
+                self.latest_signal_action_choice = self.random.choice(
+                    self.num_actions, p=signal_action_probs.T[signal])
+                
+                if world_state != -1:
+                    combined_state_signal_action_weights = self.signal_action_weights + self.state_action_weights[world_state]
 
-            if world_state != -1:
-                # we are observing the world state, and should consider additonal propensities
-                # dump the buckets together (add pre-transformation weights) and recalculate true propensities
-                # the score for each state will be added to the buckets for all signals.
-                transformed_signal_action_weights: np.ndarray = transformation_vector(
-                    self.signal_action_weights + self.state_action_weights[world_state])
-                # sum the transformed propensities to convert them into action proabilities given a signal
-                row_sums = np.sum(transformed_signal_action_weights, axis=1)
-                signal_action_probs: np.ndarray = transformed_signal_action_weights.T / row_sums
+                    row_sums = np.sum(combined_state_signal_action_weights, axis=1)
+                    signal_action_probs: np.ndarray = combined_state_signal_action_weights.T / row_sums
 
         except RuntimeWarning:
             print("Reciever failed to covert weights")
